@@ -6,11 +6,18 @@ import scipy.signal
 import dynamic_reconfigure.client
 
 from std_srvs.srv import Empty
-from geometry_msgs.msg import Quaternion, Pose, PoseWithCovarianceStamped, Twist, PoseStamped
+from geometry_msgs.msg import (
+    Quaternion,
+    Pose,
+    PoseWithCovarianceStamped,
+    Twist,
+    PoseStamped,
+)
 from move_base_msgs.msg import MoveBaseGoal, MoveBaseAction
 from nav_msgs.msg import OccupancyGrid, Path, Odometry
 from nav_msgs.srv import GetPlan
 from tf.transformations import euler_from_quaternion
+
 
 def _create_MoveBaseGoal(x, y, angle):
     """
@@ -18,21 +25,24 @@ def _create_MoveBaseGoal(x, y, angle):
     Returns a MoveBaseGoal
     """
     mb_goal = MoveBaseGoal()
-    mb_goal.target_pose.header.frame_id = 'odom' # Note: the frame_id must be map
+    mb_goal.target_pose.header.frame_id = "odom"  # Note: the frame_id must be map
     mb_goal.target_pose.pose.position.x = x
     mb_goal.target_pose.pose.position.y = y
-    mb_goal.target_pose.pose.position.z = 0 # z must be 0.0 (no height in the map)
+    mb_goal.target_pose.pose.position.z = 0  # z must be 0.0 (no height in the map)
 
-    mb_goal.target_pose.pose.orientation = Quaternion(0, 0, np.sin(angle/2.), np.cos(angle/2.))
+    mb_goal.target_pose.pose.orientation = Quaternion(
+        0, 0, np.sin(angle / 2.0), np.cos(angle / 2.0)
+    )
 
     return mb_goal
+
 
 def _create_PoseWithCovarianceStamped():
     """
     Create initial pose in odometery frame (used to reset)
     """
     a = PoseWithCovarianceStamped()
-    a.header.frame_id = 'odom'
+    a.header.frame_id = "odom"
     a.pose.pose.position.x = 0.0
     a.pose.pose.position.y = 0.0
     a.pose.pose.position.z = 0.0
@@ -42,16 +52,17 @@ def _create_PoseWithCovarianceStamped():
     a.pose.pose.orientation.w = 0.0
     return a
 
-class Robot_config():
-    """This is a class that tracks the jackal robot status
-    """
+
+class Robot_config:
+    """This is a class that tracks the jackal robot status"""
+
     def __init__(self):
-        self.X = 0 # inertia frame
+        self.X = 0  # inertia frame
         self.Y = 0
         self.Z = 0
         self.PSI = 0
         self.global_path = []
-        self.gx = 0 # body frame
+        self.gx = 0  # body frame
         self.gy = 0
         self.gp = 0
         self.los = 1
@@ -69,7 +80,7 @@ class Robot_config():
         self.X = msg.pose.pose.position.x
         self.Y = msg.pose.pose.position.y
         self.Z = msg.pose.pose.position.z
-        self.PSI = np.arctan2(2 * (q0*q3 + q1*q2), (1 - 2*(q2**2+q3**2)))
+        self.PSI = np.arctan2(2 * (q0 * q3 + q1 * q2), (1 - 2 * (q2 ** 2 + q3 ** 2)))
         self.qt = (q1, q2, q3, q0)
 
     def get_global_path(self, msg):
@@ -77,13 +88,13 @@ class Robot_config():
         for pose in msg.poses:
             gp.append([pose.pose.position.x, pose.pose.position.y])
         gp = np.array(gp)
-        if(gp.size != 0):
-            x = gp[:,0]
+        if gp.size != 0:
+            x = gp[:, 0]
             try:
                 xhat = scipy.signal.savgol_filter(x, 19, 3)
             except:
                 xhat = x
-            y = gp[:,1]
+            y = gp[:, 1]
             try:
                 yhat = scipy.signal.savgol_filter(y, 19, 3)
             except:
@@ -92,16 +103,22 @@ class Robot_config():
             gphat.tolist()
             self.global_path = gphat
 
+
 def transform_lg(wp, X, Y, PSI):
-    R_r2i = np.matrix([[np.cos(PSI), -np.sin(PSI), X], [np.sin(PSI), np.cos(PSI), Y], [0, 0, 1]])
+    R_r2i = np.matrix(
+        [[np.cos(PSI), -np.sin(PSI), X], [np.sin(PSI), np.cos(PSI), Y], [0, 0, 1]]
+    )
     R_i2r = np.linalg.inv(R_r2i)
     pi = np.matrix([[wp[0]], [wp[1]], [1]])
     pr = np.matmul(R_i2r, pi)
-    lg = np.array([pr[0,0], pr[1, 0]])
+    lg = np.array([pr[0, 0], pr[1, 0]])
     return lg
 
+
 def transform_gp(gp, X, Y, PSI):
-    R_r2i = np.matrix([[np.cos(PSI), -np.sin(PSI), X], [np.sin(PSI), np.cos(PSI), Y], [0, 0, 1]])
+    R_r2i = np.matrix(
+        [[np.cos(PSI), -np.sin(PSI), X], [np.sin(PSI), np.cos(PSI), Y], [0, 0, 1]]
+    )
     R_i2r = np.linalg.inv(R_r2i)
 
     pi = np.concatenate([gp, np.ones_like(gp[:, :1])], axis=-1)
@@ -109,37 +126,57 @@ def transform_gp(gp, X, Y, PSI):
     return np.asarray(pr[:2, :])
 
 
-class MoveBase():
-
-    def __init__(self, goal_position = [6, 6, 0], base_local_planner="base_local_planner/TrajectoryPlannerROS"):
+class MoveBase:
+    def __init__(
+        self,
+        goal_position=[6, 6, 0],
+        base_local_planner="base_local_planner/TrajectoryPlannerROS",
+    ):
         self.goal_position = goal_position
         self.base_local_planner = base_local_planner.split("/")[-1]
-        self.planner_client = dynamic_reconfigure.client.Client('/move_base/' + self.base_local_planner)
-        self.local_costmap_client = dynamic_reconfigure.client.Client('move_base/local_costmap/inflater_layer')
-        self.global_costmap_client = dynamic_reconfigure.client.Client('move_base/global_costmap/inflater_layer')
-        self.nav_as = actionlib.SimpleActionClient('/move_base', MoveBaseAction)
-        self.global_goal = _create_MoveBaseGoal(goal_position[0], goal_position[1], goal_position[2])
-        self._clear_costmap = rospy.ServiceProxy('/move_base/clear_costmaps', Empty)
+        self.planner_client = dynamic_reconfigure.client.Client(
+            "/move_base/" + self.base_local_planner
+        )
+        self.local_costmap_client = dynamic_reconfigure.client.Client(
+            "move_base/local_costmap/inflation_layer"
+        )
+        self.global_costmap_client = dynamic_reconfigure.client.Client(
+            "move_base/global_costmap/inflation_layer"
+        )
+        self.nav_as = actionlib.SimpleActionClient("/move_base", MoveBaseAction)
+        self.global_goal = _create_MoveBaseGoal(
+            goal_position[0], goal_position[1], goal_position[2]
+        )
+        self._clear_costmap = rospy.ServiceProxy("/move_base/clear_costmaps", Empty)
         goal = rospy.wait_for_message("/move_base_simple/goal", PoseStamped)
         self.global_goal_listener = rospy.Subscriber(
             "/goal", PoseStamped, self.get_global_goal
         )
         self.robot_config = Robot_config()
-        self.sub_robot = rospy.Subscriber("/odom", Odometry, self.robot_config.get_robot_status)
+        self.sub_robot = rospy.Subscriber(
+            "/odom", Odometry, self.robot_config.get_robot_status
+        )
         # self.sub_gp = rospy.Subscriber("/move_base/" + self.base_local_planner + "/global_plan", Path, self.robot_config.get_global_path)
-        self.sub_gp = rospy.Subscriber("/move_base/NavfnROS/plan", Path, self.robot_config.get_global_path)
-        self._make_plan = rospy.ServiceProxy('/move_base/NavfnROS/make_plan', GetPlan)
-
+        self.sub_gp = rospy.Subscriber(
+            "/move_base/NavfnROS/plan", Path, self.robot_config.get_global_path
+        )
+        self._make_plan = rospy.ServiceProxy("/move_base/NavfnROS/make_plan", GetPlan)
 
     def get_global_goal(self, msg):
         x = msg.pose.position.x
         y = msg.pose.position.y
-        
+
         orientation_q = msg.pose.orientation
-        orientation_list = [orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w]
-        (roll, pitch, yaw) = euler_from_quaternion (orientation_list)
+        orientation_list = [
+            orientation_q.x,
+            orientation_q.y,
+            orientation_q.z,
+            orientation_q.w,
+        ]
+        (roll, pitch, yaw) = euler_from_quaternion(orientation_list)
         angle = yaw
         self.goal_position = [x, y, angle]
+
     def make_plan(self):
         # get_plan = GetPlan()
 
@@ -160,35 +197,43 @@ class MoveBase():
         goal.pose.position.x = x
         goal.pose.position.y = y
         goal.pose.position.z = 0
-        goal.pose.orientation = Quaternion(0, 0, np.sin(angle/2.), np.cos(angle/2.))
+        goal.pose.orientation = Quaternion(
+            0, 0, np.sin(angle / 2.0), np.cos(angle / 2.0)
+        )
         tolerance = 0.5
-        
-        rospy.wait_for_service('/move_base/make_plan')
+
+        rospy.wait_for_service("/move_base/make_plan")
         try:
             self._make_plan(start, goal, tolerance)
         except rospy.ServiceException:
-            print ("/make_plan service call failed")
+            print("/make_plan service call failed")
 
     def set_navi_param(self, param_name, param):
 
-        if param_name != 'inflation_radius':
+        if param_name != "inflation_radius":
             self.planner_client.update_configuration({param_name.split("/")[-1]: param})
-            rospy.set_param('/move_base/' + param_name, param)
+            rospy.set_param("/move_base/" + param_name, param)
 
-            if param_name == 'max_vel_theta':
-                self.planner_client.update_configuration({'min_vel_theta': -param})
-                rospy.set_param('/move_base/' + 'min_vel_theta', -param)
+            if param_name == "max_vel_theta":
+                self.planner_client.update_configuration({"min_vel_theta": -param})
+                rospy.set_param("/move_base/" + "min_vel_theta", -param)
         else:
             self.global_costmap_client.update_configuration({param_name: param})
             self.local_costmap_client.update_configuration({param_name: param})
-            rospy.set_param('/move_base/global_costmap/inflater_layer/' + param_name, param)
-            rospy.set_param('/move_base/local_costmap/inflater_layer/' + param_name, param)
+            rospy.set_param(
+                "/move_base/global_costmap/inflation_layer/" + param_name, param
+            )
+            rospy.set_param(
+                "/move_base/local_costmap/inflation_layer/" + param_name, param
+            )
 
     def get_navi_param(self, param_name):
-        if param_name != 'inflation_radius':
-            param = rospy.get_param('/move_base/' + param_name)
+        if param_name != "inflation_radius":
+            param = rospy.get_param("/move_base/" + param_name)
         else:
-            param = rospy.get_param('/move_base/global_costmap/inflater_layer/' + param_name)
+            param = rospy.get_param(
+                "/move_base/global_costmap/inflation_layer/" + param_name
+            )
         return param
 
     def set_global_goal(self):
@@ -196,7 +241,7 @@ class MoveBase():
         try:
             self.nav_as.send_goal(self.global_goal)
         except (rospy.ServiceException) as e:
-            print ("/move_base service call failed")
+            print("/move_base service call failed")
 
     # def reset_robot_in_odom(self):
     #     rospy.wait_for_service('/set_pose')
@@ -212,14 +257,16 @@ class MoveBase():
     #     self.robot_config.vel_counter = 0
 
     def clear_costmap(self):
-        rospy.wait_for_service('/move_base/clear_costmaps')
+        rospy.wait_for_service("/move_base/clear_costmaps")
         try:
             self._clear_costmap()
         except rospy.ServiceException:
-            print ("/clear_costmaps service call failed")
+            print("/clear_costmaps service call failed")
 
-    def reset_global_goal(self, goal_position = [6, 6, 0]):
-        self.global_goal = _create_MoveBaseGoal(goal_position[0], goal_position[1], goal_position[2])
+    def reset_global_goal(self, goal_position=[6, 6, 0]):
+        self.global_goal = _create_MoveBaseGoal(
+            goal_position[0], goal_position[1], goal_position[2]
+        )
 
     def get_local_goal(self):
         """Get the local goal coordinate relative to the robot's current location
@@ -232,16 +279,16 @@ class MoveBase():
         Y = self.robot_config.Y
         PSI = self.robot_config.PSI
         los = self.robot_config.los
-        
+
         lg_x, lg_y = self.robot_config.last_lg
         dist_last_lg = (X - lg_x) ** 2 + (Y - lg_y) ** 2
 
         lg_x = 0
         lg_y = 0
-        if len(gp)>0:
+        if len(gp) > 0:
             lg_flag = 0
             for wp in gp:
-                dist = (np.array(wp)-np.array([X, Y]))**2
+                dist = (np.array(wp) - np.array([X, Y])) ** 2
                 dist = np.sum(dist, axis=0)
                 dist = np.sqrt(dist)
                 if dist > los:
@@ -265,14 +312,18 @@ class MoveBase():
 
     def get_global_path(self):
         gp = self.robot_config.global_path
-        gp = transform_gp(gp, self.robot_config.X, self.robot_config.Y, self.robot_config.PSI)
+        gp = transform_gp(
+            gp, self.robot_config.X, self.robot_config.Y, self.robot_config.PSI
+        )
         return gp.T
 
     def get_costmap(self):
         cm = None
         while cm is None:
             try:
-                cm = rospy.wait_for_message("/move_base/global_costmap/costmap", OccupancyGrid, timeout=5)
-            except: 
+                cm = rospy.wait_for_message(
+                    "/move_base/global_costmap/costmap", OccupancyGrid, timeout=5
+                )
+            except:
                 pass
         return cm
