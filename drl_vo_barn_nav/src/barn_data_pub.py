@@ -24,7 +24,7 @@ class BARNData:
         self.ts_cnt = 0  # maximum 7 timesteps
 
         # ros:
-        self.scan_sub = rospy.Subscriber("/scan", LaserScan, self.scan_callback)
+        self.scan_sub = rospy.Subscriber("scan", LaserScan, self.scan_callback)
         self.goal_sub = rospy.Subscriber("cnn_goal", Point, self.goal_callback)
         self.barn_data_pub = rospy.Publisher('barn_data', BARN_data, queue_size=1, latch=False)
     

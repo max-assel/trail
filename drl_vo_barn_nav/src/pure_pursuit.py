@@ -22,6 +22,13 @@ class PurePursuit:
         self.path = None  # store the path to the goal
         self.lock = threading.Lock()  # lock to keep data thread safe
 
+        self.ns_ = rospy.get_namespace()
+        self.ns_ = self.ns_.replace("/", "")
+        self.base_link = rospy.get_param("robot_base_frame", "base_link")
+        self.odom_frame = "odom"
+        if self.ns_ != "":
+            self.base_link = self.ns_ + "/" + self.base_link
+            self.odom_frame = self.ns_ + "/" + self.odom_frame
         # Initialize ROS objects
         # self.goal_sub = rospy.Subscriber("/move_base/current_goal", PoseStamped, self.goal_callback)
         self.path_sub = rospy.Subscriber(
@@ -38,30 +45,19 @@ class PurePursuit:
 
         # Figure out the name of the base_link of the robot (either base_link or base_footprint depending on simulation)
         self.tf_listener.waitForTransform(
-            "/odom", "/map", rospy.Time(), rospy.Duration(4.0)
+            self.odom_frame, "/map", rospy.Time(), rospy.Duration(4.0)
         )
         try:
             (trans, rot) = self.tf_listener.lookupTransform(
-                "/odom", "/base_link", rospy.Time(0)
+                self.odom_frame, self.base_link, rospy.Time(0)
             )
-            self.base_link = "/base_link"
         except (
             tf.LookupException,
             tf.ConnectivityException,
             tf.ExtrapolationException,
         ):
-            rospy.logwarn("Could not get find target frame /base_link")
-        try:
-            (trans, rot) = self.tf_listener.lookupTransform(
-                "/odom", "/base_footprint", rospy.Time(0)
-            )
-            self.base_link = "/base_footprint"
-        except (
-            tf.LookupException,
-            tf.ConnectivityException,
-            tf.ExtrapolationException,
-        ):
-            rospy.logwarn("Could not get find target frame /base_footprint")
+            rospy.logwarn(f"Could not get find target frame {self.base_link}")
+ 
 
     # Callback function for the path subscriber
     def path_callback(self, msg):
@@ -85,7 +81,7 @@ class PurePursuit:
         # look up the current pose of the base_footprint using the tf tree
         try:
             (trans, rot) = self.tf_listener.lookupTransform(
-                "/odom", self.base_link, rospy.Time(0)
+                self.odom_frame, self.base_link, rospy.Time(0)
             )
         except (
             tf.LookupException,
@@ -280,7 +276,7 @@ class PurePursuit:
             # look up the current pose of the base_footprint using the tf tree
             try:
                 (trans, rot) = self.tf_listener.lookupTransform(
-                    "/odom", self.base_link, rospy.Time(0)
+                    self.odom_frame, self.base_link, rospy.Time(0)
                 )
             except (
                 tf.LookupException,

@@ -89,8 +89,8 @@ class DrlInference:
         print("Finish loading model.")
 
         # initialize ROS objects
-        self.barn_data_sub = rospy.Subscriber("/barn_data", BARN_data, self.barn_data_callback, queue_size=2, buff_size=2**24)
-        self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10, latch=False)
+        self.barn_data_sub = rospy.Subscriber("barn_data", BARN_data, self.barn_data_callback, queue_size=2, buff_size=2**24)
+        self.cmd_vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10, latch=False)
         
     # Callback function for the barn_data subscriber
     def barn_data_callback(self, barn_data_msg):
