@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # file: $ISIP_EXP/tuh_dpath/exp_0074/scripts/decode.py
 #
