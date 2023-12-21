@@ -73,12 +73,17 @@ class DrlInference:
         # launch move_base:
         self.goal_position = [goal_x, goal_y, 0]
         self.base_local_planner = "base_local_planner/TrajectoryPlannerROS"
-        self.move_base = MoveBase(goal_position=self.goal_position, base_local_planner=self.base_local_planner)
+        
+        print("PRE")
+        self.move_base = MoveBase(goal_position=self.goal_position, base_local_planner=self.base_local_planner, move_base_node=rospy.get_param("move_base_node", "move_base"))
+        print("POST")
         # make plan: 
         # self.move_base.reset_robot_in_odom()
         self.move_base.make_plan()
+        print("2")
         self._clear_costmap()
-    
+        print("3")
+
         # load model:
         print("Loading model.")
         if(model == None):

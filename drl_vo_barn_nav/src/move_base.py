@@ -1,3 +1,4 @@
+import os
 import rospy
 import actionlib
 import numpy as np
@@ -127,40 +128,49 @@ def transform_gp(gp, X, Y, PSI):
 
 
 class MoveBase:
+
+    move_base_node: str
+
     def __init__(
         self,
         goal_position=[6, 6, 0],
         base_local_planner="base_local_planner/TrajectoryPlannerROS",
+        move_base_node = "move_base"
     ):
+        
+        self.move_base_node = move_base_node
+
         self.goal_position = goal_position
         self.base_local_planner = base_local_planner.split("/")[-1]
         self.planner_client = dynamic_reconfigure.client.Client(
-            "move_base/" + self.base_local_planner
+            os.path.join(self.move_base_node, self.base_local_planner)
         )
         self.local_costmap_client = dynamic_reconfigure.client.Client(
-            "move_base/local_costmap/inflation_layer"
+            os.path.join(self.move_base_node, "local_costmap", "inflation_layer")
         )
         self.global_costmap_client = dynamic_reconfigure.client.Client(
-            "move_base/global_costmap/inflation_layer"
+            os.path.join(self.move_base_node, "global_costmap", "inflation_layer")
         )
         self.nav_as = actionlib.SimpleActionClient("move_base", MoveBaseAction)
         self.global_goal = _create_MoveBaseGoal(
             goal_position[0], goal_position[1], goal_position[2]
         )
-        self._clear_costmap = rospy.ServiceProxy("move_base/clear_costmaps", Empty)
-        goal = rospy.wait_for_message("move_base_simple/goal", PoseStamped)
+        self._clear_costmap = rospy.ServiceProxy(os.path.join(self.move_base_node, "clear_costmaps"), Empty)
+        goal = rospy.wait_for_message(os.path.join("move_base_simple", "goal"), PoseStamped)
         self.global_goal_listener = rospy.Subscriber(
-            "move_base_simple/goal", PoseStamped, self.get_global_goal
+            os.path.join("move_base_simple", "goal"),
+            PoseStamped,
+            self.get_global_goal
         )
         self.robot_config = Robot_config()
         self.sub_robot = rospy.Subscriber(
             "odom", Odometry, self.robot_config.get_robot_status
         )
-        # self.sub_gp = rospy.Subscriber("/move_base/" + self.base_local_planner + "/global_plan", Path, self.robot_config.get_global_path)
+        # self.sub_gp = rospy.Subscriber(os.path.join(self.move_base_node, self.base_local_planner, "global_plan"), Path, self.robot_config.get_global_path)
         self.sub_gp = rospy.Subscriber(
-            "move_base/NavfnROS/plan", Path, self.robot_config.get_global_path
+            os.path.join(self.move_base_node, "NavfnROS", "plan"), Path, self.robot_config.get_global_path
         )
-        self._make_plan = rospy.ServiceProxy("move_base/NavfnROS/make_plan", GetPlan)
+        self._make_plan = rospy.ServiceProxy(os.path.join(self.move_base_node, "NavfnROS", "make_plan"), GetPlan)
 
     def get_global_goal(self, msg):
         x = msg.pose.position.x
@@ -202,7 +212,7 @@ class MoveBase:
         )
         tolerance = 0.5
 
-        rospy.wait_for_service("move_base/make_plan")
+        rospy.wait_for_service(os.path.join(self.move_base_node, "make_plan"))
         try:
             self._make_plan(start, goal, tolerance)
         except rospy.ServiceException:
@@ -210,29 +220,33 @@ class MoveBase:
 
     def set_navi_param(self, param_name, param):
 
+        if param is None or np.isnan(param):
+            rospy.logwarn(f"tried to set {param_name} to {param}")
+            return
+
         if param_name != "inflation_radius":
             self.planner_client.update_configuration({param_name.split("/")[-1]: param})
-            rospy.set_param("move_base/" + param_name, param)
+            rospy.set_param(os.path.join(self.move_base_node, param_name), param)
 
             if param_name == "max_vel_theta":
                 self.planner_client.update_configuration({"min_vel_theta": -param})
-                rospy.set_param("move_base/" + "min_vel_theta", -param)
+                rospy.set_param(os.path.join(self.move_base_node, "min_vel_theta"), -param)
         else:
             self.global_costmap_client.update_configuration({param_name: param})
             self.local_costmap_client.update_configuration({param_name: param})
             rospy.set_param(
-                "move_base/global_costmap/inflation_layer/" + param_name, param
+                os.path.join(self.move_base_node, "global_costmap", "inflation_layer", param_name), param
             )
             rospy.set_param(
-                "move_base/local_costmap/inflation_layer/" + param_name, param
+                os.path.join(self.move_base_node, "local_costmap", "inflation_layer", param_name), param
             )
 
     def get_navi_param(self, param_name):
         if param_name != "inflation_radius":
-            param = rospy.get_param("move_base/" + param_name)
+            param = rospy.get_param(os.path.join(self.move_base_node, param_name))
         else:
             param = rospy.get_param(
-                "move_base/global_costmap/inflation_layer/" + param_name
+                os.path.join(self.move_base_node, "global_costmap", "inflation_layer"), param_name
             )
         return param
 
@@ -257,7 +271,8 @@ class MoveBase:
     #     self.robot_config.vel_counter = 0
 
     def clear_costmap(self):
-        rospy.wait_for_service("move_base/clear_costmaps")
+
+        rospy.wait_for_service(os.path.join(self.move_base_node, "clear_costmaps"))
         try:
             self._clear_costmap()
         except rospy.ServiceException:
@@ -322,7 +337,7 @@ class MoveBase:
         while cm is None:
             try:
                 cm = rospy.wait_for_message(
-                    "move_base/global_costmap/costmap", OccupancyGrid, timeout=5
+                    os.path.join(self.move_base_node, "global_costmap", "costmap"), OccupancyGrid, timeout=5
                 )
             except:
                 pass
