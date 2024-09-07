@@ -15,6 +15,7 @@ import threading
 class PurePursuit:
     # Constructor
     def __init__(self):
+        # print("PurePursuit init")
         # initialize parameters
         self.lookahead = 1
         self.rate = 20
@@ -24,6 +25,7 @@ class PurePursuit:
 
         self.ns_ = rospy.get_namespace()
         self.ns_ = self.ns_.replace("/", "")
+        # print("self.ns_: ",self.ns_)
         self.base_link = rospy.get_param("robot_base_frame", "base_link")
         self.odom_frame = "odom"
         if self.ns_ != "":
@@ -32,7 +34,7 @@ class PurePursuit:
         # Initialize ROS objects
         # self.goal_sub = rospy.Subscriber("/move_base/current_goal", PoseStamped, self.goal_callback)
         self.path_sub = rospy.Subscriber(
-            "move_base/NavfnROS/plan", Path, self.path_callback
+            "move_base_flex/NavfnROS/plan", Path, self.path_callback
         )
         self.tf_listener = tf.TransformListener()
         # self.cmd_vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
@@ -42,6 +44,8 @@ class PurePursuit:
         self.final_goal_pub = rospy.Publisher(
             "final_goal", Point, queue_size=1
         )  # , latch=True)
+
+        # print("??????")
 
         # Figure out the name of the base_link of the robot (either base_link or base_footprint depending on simulation)
         self.tf_listener.waitForTransform(
@@ -62,6 +66,7 @@ class PurePursuit:
     # Callback function for the path subscriber
     def path_callback(self, msg):
         rospy.logdebug("PurePursuit: Got path")
+        # print("[path_callback:]")
         # lock this data to ensure that it is not changed while other processes are using it
         self.lock.acquire()
         self.path = msg  # store the path in the class member
@@ -177,13 +182,17 @@ class PurePursuit:
     # Outputs:
     #   goal = numpy array with 2 elements (x and y position of goal)
     def find_goal(self, x, pt, dist, seg):
+        # print("[find_goal:]")
+
         goal = None
         end_goal_pos = None
         end_goal_rot = None
         if dist > self.lookahead:
             # if further than lookahead from the path, drive towards the path
             goal = pt
+            # print("     prong 1")
         else:
+            # print("     prong 2")
             ##### YOUR CODE STARTS HERE #####
             seg_max = len(self.path.poses) - 2
             # extract the end of segment seg from the path

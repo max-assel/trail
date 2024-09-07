@@ -74,6 +74,8 @@ class DrlInference:
         self.goal_position = [goal_x, goal_y, 0]
         self.base_local_planner = "base_local_planner/TrajectoryPlannerROS"
         
+        print("self.goal_position: ", self.goal_position)
+
         print("PRE")
         self.move_base = MoveBase(goal_position=self.goal_position, base_local_planner=self.base_local_planner, move_base_node=rospy.get_param("move_base_node", "move_base"))
         print("POST")
@@ -103,6 +105,9 @@ class DrlInference:
         self.goal = barn_data_msg.goal_cart
         self.move_base.make_plan()  
         cmd_vel = Twist()
+
+        # print("self.goal: ", self.goal)
+        # print("np.shape(self.scan): ", np.shape(self.scan))
 
         if(self.start): # start navigation  
             # minimum distance:
@@ -153,17 +158,28 @@ class DrlInference:
                 # observation:
                 self.observation = np.concatenate((ped_pos, self.scan, self.goal), axis=None) 
 
+                # print("self.scan: ", self.scan)
+
+                # print("self.goal: ", self.goal)
+
                 # drl-vo infrence: calculate the goal velocity of the robot and send the command
                 action, _states = self.model.predict(self.observation, deterministic=True)
 
                 # velocities:
-                vx_min = 0
-                if(min_scan_dist >= 2.2): # free space margin
-                    vx_max = 2
-                else:
-                    vx_max = 0.5 
-                vz_min = -0.7
-                vz_max = 0.7
+                # vx_min = 0
+                # if(min_scan_dist >= 2.2): # free space margin
+                #     vx_max = 2
+                # else:
+                #     vx_max = 0.5
+                vx_min = -1
+                vx_max = 1
+
+                vz_min = -1
+                vz_max = 1
+
+
+                # vz_min = -0.7
+                # vz_max = 0.7
                 # MaxAbsScaler inverse:
                 cmd_vel.linear.x = (action[0] + 1) * (vx_max - vx_min) / 2 + vx_min
                 cmd_vel.angular.z = (action[1] + 1) * (vz_max - vz_min) / 2 + vz_min

@@ -17,7 +17,10 @@ class BARNData:
         
         self.scan = [] #np.zeros(720)
         self.goal_cart = np.zeros(2)
-        self.scan_tmp = np.zeros(720)
+        self.scan_size_des = 720
+        self.scan_tmp = np.zeros(self.scan_size_des)
+        self.scan_angle_increment_des = 2 * np.pi / (self.scan_size_des - 1)
+
 	    # timer:
         self.timer = None
         self.rate = 20  # 20 Hz velocity controller
@@ -30,12 +33,44 @@ class BARNData:
     
     # Callback function for the scan measurement subscriber
     def scan_callback(self, laserScan_msg):
+        # print("laserScan_msg: ", laserScan_msg)
+        # print("len(laserScan_msg.ranges): ",len(laserScan_msg.ranges))
+
+        max_range = laserScan_msg.range_max
+        angle_increment_orig = laserScan_msg.angle_increment
+        range_size = len(laserScan_msg.ranges)
+
         # get the laser scan data:
-        self.scan_tmp = np.zeros(720)
+        self.scan_tmp = np.zeros(self.scan_size_des)
         scan_data = np.array(laserScan_msg.ranges, dtype=np.float32)
-        scan_data[np.isnan(scan_data)] = 30.
-        scan_data[np.isinf(scan_data)] = 30.
-        self.scan_tmp = scan_data
+        scan_data[np.isnan(scan_data)] = max_range + 0.01
+        scan_data[np.isinf(scan_data)] = max_range + 0.01
+        for i in range(0, self.scan_size_des):
+            theta = (i - self.scan_size_des/2) * self.scan_angle_increment_des
+            
+            idx_low = int(np.floor( (theta + np.pi) / angle_increment_orig))
+            # print("orig idx_low: ", idx_low)
+            idx_low = np.max([0, idx_low])
+            # print("clip idx_low: ", idx_low)
+
+            theta_low = (idx_low - range_size/2) * angle_increment_orig
+            # print("theta_low: ", theta_low)
+
+            idx_high = int(np.ceil( (theta + np.pi) / angle_increment_orig))
+            # print("orig idx_high: ", idx_high)
+
+            idx_high = np.min([range_size - 1, idx_high])
+            # print("clip idx_high: ", idx_high)
+
+            theta_high = (idx_high - range_size/2) * angle_increment_orig
+            # print("theta_high: ", theta_high)
+
+            # print("scan_data[idx_low]: ", scan_data[idx_low])
+            # print("scan_data[idx_high]: ", scan_data[idx_high])
+
+            self.scan_tmp[i] = scan_data[idx_low] + ((theta - theta_low) / (0.000000000001 + theta_high - theta_low)) * (scan_data[idx_high] - scan_data[idx_low])
+
+        # self.scan_tmp = scan_data
 
         # start the timer if this is the first path received
         if self.timer is None:
