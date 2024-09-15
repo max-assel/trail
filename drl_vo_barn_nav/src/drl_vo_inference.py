@@ -98,7 +98,8 @@ class DrlInference:
         # initialize ROS objects
         self.barn_data_sub = rospy.Subscriber("barn_data", BARN_data, self.barn_data_callback, queue_size=2, buff_size=2**24)
         self.cmd_vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10, latch=False)
-        
+        self.tmp_cmd_vel_pub = rospy.Publisher('learned_cmd_vel', Twist, queue_size=10, latch=False)
+
     # Callback function for the barn_data subscriber
     def barn_data_callback(self, barn_data_msg):
         self.scan = barn_data_msg.scan
@@ -187,6 +188,7 @@ class DrlInference:
         # publish the cmd_vel:
         if not np.isnan(cmd_vel.linear.x) and not np.isnan(cmd_vel.angular.z): # ensure data is valid
             self.cmd_vel_pub.publish(cmd_vel)
+            self.tmp_cmd_vel_pub.publish(cmd_vel)
     
     def _clear_costmap(self):
         self.move_base.clear_costmap()
